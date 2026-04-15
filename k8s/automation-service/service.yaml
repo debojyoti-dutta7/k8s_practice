@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: snapee
+  name: automation-service-svc
+spec:
+  type: ClusterIP
+  selector:
+    app: automation-service
+  ports:
+  - port: 5002
+    targetPort: 5002
+    protocol: TCP

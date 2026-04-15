@@ -1,0 +1,84 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  namespace: snapee
+  name: snapee-ingress
+  annotations:
+    # Use the new ingressClassName field instead of the annotation if possible, 
+    # but keeping both for compatibility or just the annotation if required by old controllers.
+    # However, Nginx Ingress Controller usually prefers the class name.
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+    
+    # -----------------------------------------------------
+    # Security Headers & Blocking (admin.snapecab.com logic)
+    # -----------------------------------------------------
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      more_set_headers "X-Frame-Options: SAMEORIGIN";
+      more_set_headers "X-Content-Type-Options: nosniff";
+      more_set_headers "X-XSS-Protection: 1; mode=block";
+      more_set_headers "Referrer-Policy: strict-origin-when-cross-origin";
+      
+      # Block PHP
+      location ~* \.php$ {
+          return 444;
+      }
+      # Block hidden files
+      location ~ /\. {
+          deny all;
+      }
+
+spec:
+  ingressClassName: nginx
+  rules:
+  # =====================================================
+  # NEW: admin.snapecab.com
+  # =====================================================
+  - host: admin.snapecab.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: admin-frontend-svc
+            port:
+              number: 3000
+
+  # =====================================================
+  # fleet.snapecab.com
+  # =====================================================
+  - host: fleet.snapecab.com
+    http:
+      paths:
+      - path: /admin/.*
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: dev-microservice-campaign-svc
+            port:
+              number: 5001
+      
+      - path: /payment/.*
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: payment-service-svc
+            port:
+              number: 5006
+      
+      - path: /wallet/.*
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: wallet-service-svc
+            port:
+              number: 5003
+
+      - path: /.*
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: dev-backend-svc
+            port:
+              number: 5000

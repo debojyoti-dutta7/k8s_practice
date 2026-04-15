@@ -1,0 +1,32 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: snapee
+  name: dev-backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: dev-backend
+  template:
+    metadata:
+      labels:
+        app: dev-backend
+    spec:
+      imagePullSecrets:
+        - name: aws-ecr-cred
+      containers:
+        - name: dev-backend
+          image: 297436350639.dkr.ecr.ap-south-1.amazonaws.com/snape/dev-backend:dev
+          ports:
+            - containerPort: 5000
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
+          envFrom:
+            - secretRef:
+                name: dev-backend-secret

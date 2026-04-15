@@ -1,0 +1,11 @@
+# Kubernetes Secrets (Exclude actual secret files)
+k8s/**/secret.yaml
+k8s/utils/aws-iam-creds.yaml
+
+# Locally generated files
+.env
+*.log
+
+# IDEs
+.vscode/
+.idea/

@@ -1,0 +1,22 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: snapee-infra
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: 'REPLACE_WITH_YOUR_GIT_REPO_URL' # e.g., https://github.com/user/k8s_practice.git
+    targetRevision: HEAD
+    path: k8s # Points to the folder containing your k8s manifests
+    directory:
+      recurse: true # This ensures ArgoCD looks into all subfolders (admin-frontend, dev-backend, etc.)
+  destination:
+    server: 'https://kubernetes.default.svc'
+    namespace: snapee # The target namespace for your apps
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - CreateNamespace=true # Automatically create the 'snapee' namespace if it doesn't exist

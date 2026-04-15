@@ -1,0 +1,32 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: snapee
+  name: admin-frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: admin-frontend
+  template:
+    metadata:
+      labels:
+        app: admin-frontend
+    spec:
+      imagePullSecrets:
+        - name: aws-ecr-cred
+      containers:
+        - name: admin-frontend
+          image: 297436350639.dkr.ecr.ap-south-1.amazonaws.com/snape/admin-frontend:latest
+          ports:
+            - containerPort: 3000
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
+          envFrom:
+            - secretRef:
+                name: admin-frontend-secret

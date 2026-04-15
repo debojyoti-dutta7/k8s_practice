@@ -1,0 +1,32 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: snapee
+  name: extrahourcron
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: extrahourcron
+  template:
+    metadata:
+      labels:
+        app: extrahourcron
+    spec:
+      imagePullSecrets:
+        - name: aws-ecr-cred
+      containers:
+        - name: extrahourcron
+          image: 297436350639.dkr.ecr.ap-south-1.amazonaws.com/snape/extrahourcron:latest
+          ports:
+            - containerPort: 8000
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
+          envFrom:
+            - secretRef:
+                name: extrahourcron-secret

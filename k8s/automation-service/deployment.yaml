@@ -1,0 +1,32 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: snapee
+  name: automation-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: automation-service
+  template:
+    metadata:
+      labels:
+        app: automation-service
+    spec:
+      imagePullSecrets:
+      - name: aws-ecr-cred
+      containers:
+      - name: automation-service
+        image: 297436350639.dkr.ecr.ap-south-1.amazonaws.com/snape/automation-service:latest
+        ports:
+        - containerPort: 5002
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
+          limits:
+            cpu: "500m"
+            memory: "256Mi"
+        envFrom:
+        - secretRef:
+            name: automation-service-secret

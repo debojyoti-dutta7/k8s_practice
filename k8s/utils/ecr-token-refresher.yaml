@@ -1,0 +1,83 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ecr-token-refresher-sa
+  namespace: snapee
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  namespace: snapee
+  name: ecr-token-refresher-role
+rules:
+- apiGroups: [""]
+  resources: ["secrets"]
+  resourceNames: ["aws-ecr-cred"]
+  verbs: ["get", "delete", "create", "patch", "update"]
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ecr-token-refresher-rb
+  namespace: snapee
+subjects:
+- kind: ServiceAccount
+  name: ecr-token-refresher-sa
+  namespace: snapee
+roleRef:
+  kind: Role
+  name: ecr-token-refresher-role
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: ecr-token-refresher
+  namespace: snapee
+spec:
+  schedule: "0 */8 * * *" # Every 8 hours
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: ecr-token-refresher-sa
+          containers:
+          - name: ecr-token-refresher
+            image: bitnami/kubectl:latest
+            command:
+            - /bin/sh
+            - -c
+            - |
+              # Install AWS CLI (using a lightweight approach or a pre-built image is better, but for this example we script it)
+              # Note: In a production environment, use an image that already has both kubectl and aws-cli.
+              # For demonstration, we'll assume an image with both or install it.
+              
+              apt-get update && apt-get install -y curl unzip
+              curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+              unzip awscliv2.zip
+              ./aws/install
+              
+              export AWS_ACCESS_KEY_ID=$(cat /etc/aws-creds/AWS_ACCESS_KEY_ID)
+              export AWS_SECRET_ACCESS_KEY=$(cat /etc/aws-creds/AWS_SECRET_ACCESS_KEY)
+              export AWS_DEFAULT_REGION=$(cat /etc/aws-creds/AWS_DEFAULT_REGION)
+              
+              TOKEN=$(aws ecr get-login-password --region ${AWS_DEFAULT_REGION})
+              
+              kubectl delete secret aws-ecr-cred --namespace snapee || true
+              kubectl create secret docker-registry aws-ecr-cred \
+                --docker-server=297436350639.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com \
+                --docker-username=AWS \
+                --docker-password="${TOKEN}" \
+                --namespace snapee
+            volumeMounts:
+            - name: aws-creds
+              mountPath: /etc/aws-creds
+              readOnly: true
+          volumes:
+          - name: aws-creds
+            secret:
+              secretName: aws-iam-creds
+          restartPolicy: OnFailure
