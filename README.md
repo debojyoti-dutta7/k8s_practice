@@ -6,9 +6,9 @@ This repository contains the Infrastructure as Code (IaC) definitions for deploy
 
 The infrastructure is defined modularly in the `k8s/` directory. Each of the 7 microservices is defined with:
 *   **Deployment:** Configured to pull images from AWS ECR with defined CPU/Memory requests to enable autoscaling.
-*   **Service:** Exposed internally via `NodePort`.
+*   **Service:** Exposed internally via `ClusterIP` or `NodePort` depending on routing requirements.
 *   **Horizontal Pod Autoscaler (HPA):** Configured to automatically scale pods between a minimum of 2 and a maximum of 10 replicas based on a 70% CPU utilization threshold.
-*   **Ingress:** Centralized Nginx routing in `k8s/networking/ingress.yaml` handling domain paths (`admin.snapecab.com`, `fleet.snapecab.com`), complete with security headers.
+*   **Ingress:** Centralized Nginx routing in `k8s/networking/ingress.yaml` handling domain paths (`devv-admin.snapecab.com`, `devv-fleet.snapecab.com`), complete with security headers and Regex URL rewrites.
 
 All resources are isolated within the `snapee` namespace.
 
@@ -16,54 +16,45 @@ All resources are isolated within the `snapee` namespace.
 
 ## What Has Been Completed (Minikube Local Setup)
 
-The local environment has been initialized and the infrastructure definition applied:
+The local environment has been initialized, core services deployed, and automated deployments configured:
 
-1.  **Cluster Initialization:** Minikube was started.
-2.  **Addons:** The Nginx Ingress controller was enabled (`minikube addons enable ingress`).
-3.  **Namespace Creation:** The isolated `snapee` environment was established (`kubectl apply -f k8s/namespace/namespace.yaml`).
-4.  **Mass Deployment:** All manifests were applied recursively (`kubectl apply -R -f k8s/`).
+### 1. Cluster & Network Foundation
+*   Minikube was started and the Nginx Ingress controller was enabled (`minikube addons enable ingress`).
+*   The isolated `snapee` namespace was established.
+*   The `hosts` file was updated to route `devv-admin.snapecab.com` and `devv-fleet.snapecab.com` to `127.0.0.1`.
+*   Ingress routes were configured with Regex path-rewriting (e.g., stripping `/wallet/` prefixes before passing to the backend) to resolve 404 errors.
 
-*Current State:* All pods are currently in `ImagePullBackOff` state. This is expected until the AWS authentication step (below) is completed.
+### 2. Service Deployment & Configuration
+*   All Kubernetes manifests (Deployments, Services, HPAs) were applied recursively.
+*   **Secrets Management:** Environment variables for `dev-backend`, `wallet-service`, and `dev-microservice-campaign` were safely encoded into Kubernetes Secrets using the `stringData` approach, keeping them out of version control via `.gitignore`.
+*   **Service Health:** 
+    *   `dev-backend` is successfully running, connected to external databases, and reachable via Ingress.
+    *   `wallet-service` is successfully running, connected to its respective databases, and reachable via Ingress.
+
+### 3. AWS ECR Authentication
+*   An IAM access key was used to generate an ECR login token.
+*   The `aws-ecr-cred` secret was successfully injected into the cluster, allowing the successful pulling of private Docker images (resolving initial `ImagePullBackOff` errors for the configured services).
+
+### 4. GitOps Implementation (ArgoCD)
+*   ArgoCD was installed into the `argocd` namespace.
+*   The `snapee-infra` Application was created, pointing to the Git repository.
+*   ArgoCD was configured with **Recursive Directory Search** (`recurse: true`), allowing it to successfully discover and map the nested microservice folders, bringing the visual resource tree online.
 
 ---
 
 ## Remaining Setup Roadmap
 
-Follow these steps to bring the application online and finalize the automated setup.
+Follow these steps to bring the remaining applications online.
 
-### Step 1: AWS ECR Authentication (Fixing Image Pulls)
-The cluster needs credentials to pull the private images from AWS ECR.
+### Step 1: Resolve Remaining Image Pull Errors
+Some services (like `admin-frontend` and `dev-microservice-campaign`) are failing to pull images.
+*   **Action:** Verify the exact ECR repository names and image tags (e.g., ensuring `snape/admin-service:latest` is correct) in the AWS Console, and update the corresponding `deployment.yaml` files.
 
-1.  Ensure you have the AWS CLI installed and configured.
-2.  Generate a token and create the secret:
-    ```powershell
-    $AWS_ECR_PASSWORD = aws ecr get-login-password --region ap-south-1
-    kubectl create secret docker-registry aws-ecr-cred `
-        --docker-server=297436350639.dkr.ecr.ap-south-1.amazonaws.com `
-        --docker-username=AWS `
-        --docker-password=$AWS_ECR_PASSWORD `
-        --namespace=snapee
-    ```
-3.  Verify the pods recover and transition to the `Running` state:
-    ```powershell
-    kubectl get pods -n snapee -w
-    ```
-
-### Step 2: Local Traffic Routing (Minikube Tunnel)
-To access the services locally via the Ingress controller:
-
-1.  In a separate terminal window, start the tunnel (keep this running):
-    ```powershell
-    minikube tunnel
-    ```
-2.  Update your local hosts file (`C:\Windows\System32\drivers\etc\hosts`) to map the domains to localhost:
-    ```text
-    127.0.0.1 admin.snapecab.com
-    127.0.0.1 fleet.snapecab.com
-    ```
+### Step 2: Configure Remaining Secrets
+*   **Action:** Create the `secret.yaml` files for the remaining services (`admin-frontend`, `automation-service`, `extrahourcron`, `payment-service`) containing their respective environment variables. Apply them using `kubectl apply -f <file>`.
 
 ### Step 3: Automate ECR Token Refresh
-AWS ECR login tokens expire every 12 hours. A CronJob has been provided to automate this refresh.
+AWS ECR login tokens expire every 12 hours. A CronJob has been provided to automate this refresh so the cluster doesn't break daily.
 
 1.  Copy the example credentials file:
     ```powershell
@@ -75,32 +66,8 @@ AWS ECR login tokens expire every 12 hours. A CronJob has been provided to autom
     kubectl apply -f k8s/utils/
     ```
 
-### Step 4: Implement GitOps with ArgoCD
-Transition to GitOps for automated deployments.
-
-1.  **Push Code to Git:** Ensure this codebase is pushed to your Git repository.
-2.  **Install ArgoCD:**
-    ```powershell
-    kubectl create namespace argocd
-    kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
-    ```
-3.  **Update Application Source:** Edit `argocd/application.yaml` and update the `repoURL` line with your Git repository URL.
-4.  **Deploy Application Definition:**
-    ```powershell
-    kubectl apply -f argocd/application.yaml
-    ```
-5.  **Access Dashboard:**
-    ```powershell
-    # Get Password
-    kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d
-    
-    # Forward Port
-    kubectl port-forward svc/argocd-server -n argocd 8080:443
-    ```
-    Access UI at `https://localhost:8080` (Username: admin).
-
-## Verification Checklist
-- [ ] `kubectl get pods -n snapee` shows all 14 pods as `Running`.
-- [ ] `kubectl get hpa -n snapee` successfully shows CPU targets instead of `<unknown>`.
-- [ ] Navigating to `http://admin.snapecab.com` in your browser successfully loads the frontend.
-- [ ] ArgoCD dashboard shows the `snapee-infra` application as green and `Synced`.
+## Daily Operations Checklist
+When resuming work, you must run these commands to "turn on" the local environment:
+1.  **Start the Cluster:** `minikube start`
+2.  **Open the Network Bridge:** `minikube tunnel` (Leave this terminal running).
+3.  **Ensure AWS Auth:** If 12 hours have passed and the automated token refresher isn't running yet, re-run the `aws-ecr-cred` creation command.

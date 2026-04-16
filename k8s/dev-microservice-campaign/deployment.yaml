@@ -17,7 +17,7 @@ spec:
         - name: aws-ecr-cred
       containers:
         - name: dev-microservice-campaign
-          image: 297436350639.dkr.ecr.ap-south-1.amazonaws.com/snape/dev-microservice-campaign:latest
+          image: 297436350639.dkr.ecr.ap-south-1.amazonaws.com/snape/admin-service:latest
           ports:
             - containerPort: 5001
           resources:
