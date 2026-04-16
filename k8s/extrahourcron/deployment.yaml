@@ -17,7 +17,7 @@ spec:
         - name: aws-ecr-cred
       containers:
         - name: extrahourcron
-          image: 297436350639.dkr.ecr.ap-south-1.amazonaws.com/snape/extrahourcron:latest
+          image: 297436350639.dkr.ecr.ap-south-1.amazonaws.com/snape/extrahourcron-service:latest
           ports:
             - containerPort: 8000
           resources:

@@ -14,60 +14,69 @@ All resources are isolated within the `snapee` namespace.
 
 ---
 
-## What Has Been Completed (Minikube Local Setup)
+## What Has Been Completed
 
 The local environment has been initialized, core services deployed, and automated deployments configured:
 
 ### 1. Cluster & Network Foundation
-*   Minikube was started and the Nginx Ingress controller was enabled (`minikube addons enable ingress`).
+*   Minikube was started and the Nginx Ingress controller was enabled.
 *   The isolated `snapee` namespace was established.
 *   The `hosts` file was updated to route `devv-admin.snapecab.com` and `devv-fleet.snapecab.com` to `127.0.0.1`.
 *   Ingress routes were configured with Regex path-rewriting (e.g., stripping `/wallet/` prefixes before passing to the backend) to resolve 404 errors.
 
 ### 2. Service Deployment & Configuration
-*   All Kubernetes manifests (Deployments, Services, HPAs) were applied recursively.
-*   **Secrets Management:** Environment variables for `dev-backend`, `wallet-service`, and `dev-microservice-campaign` were safely encoded into Kubernetes Secrets using the `stringData` approach, keeping them out of version control via `.gitignore`.
-*   **Service Health:** 
-    *   `dev-backend` is successfully running, connected to external databases, and reachable via Ingress.
-    *   `wallet-service` is successfully running, connected to its respective databases, and reachable via Ingress.
+*   **Secrets Management:** Environment variables for `dev-backend`, `wallet-service`, and `dev-microservice-campaign` were safely encoded into Kubernetes Secrets.
+*   **Service Health:** `dev-backend` and `wallet-service` are successfully running, connected to databases, and reachable via Ingress.
 
 ### 3. AWS ECR Authentication
-*   An IAM access key was used to generate an ECR login token.
-*   The `aws-ecr-cred` secret was successfully injected into the cluster, allowing the successful pulling of private Docker images (resolving initial `ImagePullBackOff` errors for the configured services).
+*   The `aws-ecr-cred` secret was successfully injected into the cluster, allowing the successful pulling of private Docker images.
 
 ### 4. GitOps Implementation (ArgoCD)
-*   ArgoCD was installed into the `argocd` namespace.
-*   The `snapee-infra` Application was created, pointing to the Git repository.
-*   ArgoCD was configured with **Recursive Directory Search** (`recurse: true`), allowing it to successfully discover and map the nested microservice folders, bringing the visual resource tree online.
+*   ArgoCD was installed and configured with **Recursive Directory Search**, bringing the visual resource tree online.
 
 ---
 
-## Remaining Setup Roadmap
+## Operational Command Reference
 
-Follow these steps to bring the remaining applications online.
+### 🛠️ Environment Management
+| Command | Use / Explanation |
+| :--- | :--- |
+| `minikube start` | Powers up the local Kubernetes cluster. |
+| `minikube tunnel` | Creates a network bridge to allow your browser to talk to the Ingress. |
+| `minikube addons enable ingress` | Installs the Nginx Ingress Controller into the cluster. |
 
-### Step 1: Resolve Remaining Image Pull Errors
-Some services (like `admin-frontend` and `dev-microservice-campaign`) are failing to pull images.
-*   **Action:** Verify the exact ECR repository names and image tags (e.g., ensuring `snape/admin-service:latest` is correct) in the AWS Console, and update the corresponding `deployment.yaml` files.
+### 🔍 Cluster Observation
+| Command | Use / Explanation |
+| :--- | :--- |
+| `kubectl get pods -n snapee` | Checks the status of all your application pods (e.g., Running, Error). |
+| `kubectl logs -l app=dev-backend -n snapee` | Views the real-time application logs (useful for debugging DB connections). |
+| `kubectl describe pod <name> -n snapee` | Shows detailed events (useful for finding why an image pull failed). |
+| `kubectl get hpa -n snapee` | Checks the status of the Autoscalers and current CPU load. |
 
-### Step 2: Configure Remaining Secrets
-*   **Action:** Create the `secret.yaml` files for the remaining services (`admin-frontend`, `automation-service`, `extrahourcron`, `payment-service`) containing their respective environment variables. Apply them using `kubectl apply -f <file>`.
+### 🚀 Deployment & Lifecycle
+| Command | Use / Explanation |
+| :--- | :--- |
+| `kubectl apply -f <path>` | Applies configuration changes from a YAML file to the cluster. |
+| `kubectl apply -R -f k8s/` | Re-deploys every service in the `k8s` folder recursively. |
+| `kubectl rollout restart deployment <name> -n snapee` | Restarts pods to force them to pick up new Secret/Config changes. |
 
-### Step 3: Automate ECR Token Refresh
-AWS ECR login tokens expire every 12 hours. A CronJob has been provided to automate this refresh so the cluster doesn't break daily.
+### 🔐 Authentication & Secrets
+| Command | Use / Explanation |
+| :--- | :--- |
+| `aws ecr get-login-password` | Generates a temporary login token from your AWS credentials. |
+| `kubectl create secret docker-registry aws-ecr-cred ...` | Stores AWS credentials in K8s so it can pull private images. |
+| `kubectl get secrets -n snapee` | Lists all active secrets (verify if auth keys exist). |
 
-1.  Copy the example credentials file:
-    ```powershell
-    cp k8s/utils/aws-iam-creds.yaml.example k8s/utils/aws-iam-creds.yaml
-    ```
-2.  Edit `k8s/utils/aws-iam-creds.yaml` and replace the placeholder values with your Base64 encoded AWS Access Key and Secret Key.
-3.  Apply the utility manifests:
-    ```powershell
-    kubectl apply -f k8s/utils/
-    ```
+### 🐙 ArgoCD Operations
+| Command | Use / Explanation |
+| :--- | :--- |
+| `kubectl port-forward svc/argocd-server -n argocd 8080:443` | Maps the ArgoCD dashboard to `https://localhost:8080`. |
+| `kubectl -n argocd get secret argocd-initial-admin-secret...` | Retrieves the default admin password for the ArgoCD UI. |
+
+---
 
 ## Daily Operations Checklist
 When resuming work, you must run these commands to "turn on" the local environment:
 1.  **Start the Cluster:** `minikube start`
 2.  **Open the Network Bridge:** `minikube tunnel` (Leave this terminal running).
-3.  **Ensure AWS Auth:** If 12 hours have passed and the automated token refresher isn't running yet, re-run the `aws-ecr-cred` creation command.
+3.  **Ensure AWS Auth:** If 12 hours have passed, re-run the `aws-ecr-cred` creation command.
